@@ -35,8 +35,6 @@ Purple=$(tput setaf 5)
 #Cyan=$(tput setaf 6)
 #White=$(tput setaf 7)
 
-# TODO Laisser à l'utilisateur la possibilité de choisir entre dirs et tapes, soit par un paramètre, soit en créant 2 tiers de stockage phobos (chacun serait en relation avec un cache, et chacun serait dans une compound resource distincte).
-
 # function for the synchronization of file $1 on local disk resource to file $2 in phobos
 syncToArch () {
     # <your command or script to copy from cache to phobos> $1 $2
@@ -88,7 +86,6 @@ stageToCache () {
         if [ "$2" ]; then
             op_ph=$(type -P phobos)
             echo "UNIVMSS $op_ph \"$1\" \"$2\""
-            # Doit être retravaillé !
             if [ -f $2 ]; then
                 sudo /bin/rm $2
             fi
@@ -267,20 +264,20 @@ mv () {
             save_log mv "$ph_del_script return with status=$ph_del($error_6)"
             if [ $error_6 == 0 ]; then
                 rm_temp_script="sudo $op_sys -f ${temp}"
-                rm_temp=$($rm_temp_script) # TODO Trouver un moyen plus sécuritaire serait utile.
-                error_6=$?
+                rm_temp=$($rm_temp_script)
+		error_6=$?
                 save_log mv "$rm_temp return with status=$rm_temp($error_6)"
             fi
         else # In case of failure, we still need to remove the temporary copy.
             rm_temp_script="sudo $op_sys -f ${temp}"
-            rm_temp=$($rm_temp_script) # TODO Trouver un moyen plus sécuritaire serait utile.
+            rm_temp=$($rm_temp_script)
             error_6=$?
             save_log mv "$rm_temp return with status=$rm_temp($error_6)"
         fi
     else # In case of failure, we still need to remove the temporary copy, (if it happened to be created).
         if [ -f "$2" ]; then
             rm_temp_script="sudo $op_sys -f ${temp}"
-            rm_temp=$($rm_temp_script) # TODO TYrouver un moyen plus sécuritaire serait utile.
+	    rm_temp=$($rm_temp_script)
             error_6=$?
             save_log mv "$rm_temp return with status=$rm_temp($error_6)"
         fi
@@ -295,7 +292,6 @@ mv () {
 }
 
 # function to do a stat on a file $1 stored in phobos
-# Pour l'heure, on se contente d'extraire via $(phobos extent list -o media_name,address) le chemin du premier extent retourné dans le système de fichiers, et d'appeler $(stat) dessus pour appliquer les Regexps présentées dans le template des UMSS.
 stat () {
     # <your command to retrieve stats on the file> $1
     # e.g: output=$(/usr/local/bin/rfstat rfioServerFoo:$1)
