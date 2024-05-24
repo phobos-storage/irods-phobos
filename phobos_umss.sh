@@ -42,36 +42,36 @@ syncToArch () {
     # Syntax remainder : phobos put </path/to/local/file> <object_id>
     
     save_log syncToArch "BEGIN syncToArch($*)"
-    error_1=0
+    rc=0
     if [ "$1" ]; then
         if [ "$2" ]; then
-            op_ph=$(type -P phobos)
+            phobos=$(type -P phobos)
             md_script="get_metadata ${1}"
             md=$($md_script)
-            error_1=$?
-            save_log syncToArch "$md_script return with integer ${error_1} and value \n${md}"
-            if [ $error_1 == 0 ]; then
-                echo "UNIVMSS $op_ph \"$1\" \"$2\""
-                put_script="sudo $op_ph put --metadata ${md} -f dir ${1} ${2}"
+            rc=$?
+            save_log syncToArch "$md_script return with integer ${rc} and value \n${md}"
+            if [ $rc == 0 ]; then
+                echo "UNIVMSS $phobos \"$1\" \"$2\""
+                put_script="sudo $phobos put --metadata ${md} -f dir ${1} ${2}"
                 put=$($put_script >> $LOGFILE_FANCY 2>&1)
-                error_1=$?
-                save_log syncToArch "$put_script return with status=$put($error_1)"
+                rc=$?
+                save_log syncToArch "$put_script return with status=$put($rc)"
 	        fi
         else
             save_log syncToArch "No OID given to put data \"$1\" to"
-            error_1=1
+            rc=1
         fi
     else
         save_log syncToArch "No object given to put"
-        error_1=2
+        rc=2
     fi
 
-    if [ "$error_1" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log syncToArch "STATUS=$STATUS($error_1)"
+        save_log syncToArch "STATUS=$STATUS($rc)"
     fi
     save_log syncToArch "END syncToArch($*)"
-    return $error_1
+    return $rc
 }
 
 # function for staging a file $1 from phobos to file $2 on disk
@@ -81,33 +81,33 @@ stageToCache () {
     # e.g: /usr/local/bin/rfcp rfioServerFoo:$1 $2
     
     save_log stageToCache "BEGIN stageToCache($*)"
-    error_2=0
+    rc=0
     if [ "$1" ]; then
         if [ "$2" ]; then
-            op_ph=$(type -P phobos)
-            echo "UNIVMSS $op_ph \"$1\" \"$2\""
+            phobos=$(type -P phobos)
+            echo "UNIVMSS $phobos \"$1\" \"$2\""
             if [ -f $2 ]; then
                 sudo /bin/rm $2
             fi
-            get_script="sudo $op_ph get ${1} ${2}"
+            get_script="sudo $phobos get ${1} ${2}"
             get=$($get_script >> $LOGFILE_FANCY 2>&1)
-            error_2=$?
-            save_log stageToCache "$get_script return with status=$get($error_2)"
+            rc=$?
+            save_log stageToCache "$get_script return with status=$get($rc)"
         else
             save_log stageToCache "No destination file to get object \"$1\" to"
-            error_2=11
+            rc=11
         fi
     else
         save_log stageToCache "No object to get"
-        error_2=12
+        rc=12
     fi
 
-    if [ "$error_2" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log stageToCache "STATUS=$STATUS($error_2)"
+        save_log stageToCache "STATUS=$STATUS($rc)"
     fi
     save_log stageToCache "END stageToCache($*)"
-    return $error_2
+    return $rc
 }
 
 # function to create a new directory $1 in the MSS logical name space
@@ -120,41 +120,41 @@ mkdir () {
     # e.g.: /usr/local/bin/rfmkdir -p rfioServerFoo:$1
 
     save_log mkdir "BEGIN mkdir($*)"
-    op_mk=$(type -P mkdir)
-    op_ph=$(type -P phobos)
-    op_rd=$(type -P readlink)
+    mkdir=$(type -P mkdir)
+    phobos=$(type -P phobos)
+    readlink=$(type -P readlink)
     
     # Check that the directory is not yet registered in phobos.
-    check_exist_script="sudo $op_ph dir list ${1}"
+    check_exist_script="sudo $phobos dir list ${1}"
     check_exist=$($check_exist_script)
-    error_3=$?
-    save_log mkdir "$check_exist_script return with status=$check_exist($error_3)"
+    rc=$?
+    save_log mkdir "$check_exist_script return with status=$check_exist($rc)"
     if [ "${check_exist}" != "${1}" ]; then
         # Create a new directory in the file system
-        create_dir_script="sudo $op_mk -p ${1}"
+        create_dir_script="sudo $mkdir -p ${1}"
         create_dir=$($create_dir_script)
-        error_3=$?
-        save_log mkdir "$create_dir_script return with status=$create_dir($error_3)"
-        if [ $error_3 == 0 ]; then
+        rc=$?
+        save_log mkdir "$create_dir_script return with status=$create_dir($rc)"
+        if [ $rc == 0 ]; then
             # Phobos add this directory
-            full_path_script="sudo $op_rd -f ${1}"
+            full_path_script="sudo $readlink -f ${1}"
             full_path=$($full_path_script)
-            dir_add_script="sudo $op_ph dir add ${full_path}"
+            dir_add_script="sudo $phobos dir add ${full_path}"
             dir_add=$($dir_add_script >> $LOGFILE_FANCY 2>&1)
-            error_3=$?
-            save_log mkdir "$dir_add_script return with status=$dir_add($error_3)"
-            if [ $error_3 == 0 ]; then
+            rc=$?
+            save_log mkdir "$dir_add_script return with status=$dir_add($rc)"
+            if [ $rc == 0 ]; then
                 # Phobos format this directory
-                dir_format_script="sudo $op_ph dir format ${full_path}"
+                dir_format_script="sudo $phobos dir format ${full_path}"
                 dir_format=$($dir_format_script >> $LOGFILE_FANCY 2>&1)
-                error_3=$?
-                save_log mkdir "$dir_format_script return with status=$dir_format($error_3)"
-                if [ $error_3 == 0 ]; then
+                rc=$?
+                save_log mkdir "$dir_format_script return with status=$dir_format($rc)"
+                if [ $rc == 0 ]; then
                     # Phobos unlock this directory
-                    dir_unlock_script="sudo $op_ph dir unlock ${full_path}"
+                    dir_unlock_script="sudo $phobos dir unlock ${full_path}"
                     dir_unlock=$($dir_unlock_script >> $LOGFILE_FANCY 2>&1)
-                    error_3=$?
-                    save_log mkdir "$dir_unlock_script return with status=$dir_unlock($error_3)"
+                    rc=$?
+                    save_log mkdir "$dir_unlock_script return with status=$dir_unlock($rc)"
                 fi
             fi
         fi
@@ -162,12 +162,12 @@ mkdir () {
         save_log mkdir "$1 already exists and is within phobos scope"
     fi
 
-    if [ "$error_3" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log mkdir "STATUS=$STATUS($error_3)"
+        save_log mkdir "STATUS=$STATUS($rc)"
     fi
     save_log mkdir "END mkdir($*)"
-    return $error_3
+    return $rc
 }
 
 # function to modify ACLs $2 (octal) in the MSS logical name space for a given directory $1
@@ -186,28 +186,28 @@ chmod () {
     #ichmod -r write bobby ./training_jpgs # i.e. op='ichmod -r' $2='write bobby' $1='./training_jpgs'
     #phobos tape set-access +PGD 07300[0-9]L8 # i.e. op='phobos ... -access' $2='+PGD' $1='tape_id'
     save_log chmod "BEGIN chmod($*)"
-    op_sys=$(type -P chmod)
-    op_ph=$(type -P phobos)
-    op_rd=$(type -P readlink)
-    #chmood_script="sudo $op_sys '$2' '$1'"
+    chmod=$(type -P chmod)
+    phobos=$(type -P phobos)
+    readlink=$(type -P readlink)
+    #chmood_script="sudo $chmod '$2' '$1'"
     #chmood=$($chmood_script) # As oppsed to what iRODS expects, $1 is not supposed to be the path to a file in the system. We give it an erzatz of permissions by saying phobos to unlock all read, write and deletion on the related object.
-    error_4=$?
-    #save_log chmod "$chmood_script return with status=$chmood($error_4)"
-    if [ $error_4 == 0 ]; then
-        full_path_script="sudo $op_rd -f ${1}"
+    rc=$?
+    #save_log chmod "$chmood_script return with status=$chmood($rc)"
+    if [ $rc == 0 ]; then
+        full_path_script="sudo $readlink -f ${1}"
         full_path=$($full_path_script)
-        ph_chmood_script="sudo $op_ph dir set-access +PGD ${full_path}"
+        ph_chmood_script="sudo $phobos dir set-access +PGD ${full_path}"
         ph_chmood=$($ph_chmood_script >> $LOGFILE_FANCY 2>&1)
-        error_4=$?
-        save_log chmod "$ph_chmood_script return with status=$ph_chmood($error_4)"
+        rc=$?
+        save_log chmod "$ph_chmood_script return with status=$ph_chmood($rc)"
     fi
 
-    if [ "$error_4" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log chmod "STATUS=$STATUS($error_4)"
+        save_log chmod "STATUS=$STATUS($rc)"
     fi
     save_log chmod "END chmod($*)"
-    return $error_4
+    return $rc
 }
 
 # function to remove a file $1 from phobos
@@ -216,18 +216,18 @@ rm () {
     # e.g: /usr/local/bin/rfrm rfioServerFoo:$1
     
     save_log rm "BEGIN rm($*)"
-    op_ph=$(type -P phobos)
-    ph_del_script="sudo $op_ph del ${1}"
+    phobos=$(type -P phobos)
+    ph_del_script="sudo $phobos del ${1}"
     ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
-    error_5=$?
-    save_log rm "$ph_del_script return with status=$ph_del($error_5)"
+    rc=$?
+    save_log rm "$ph_del_script return with status=$ph_del($rc)"
     
-    if [ "$error_5" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log rm "STATUS=$STATUS($error_5)"
+        save_log rm "STATUS=$STATUS($rc)"
     fi
     save_log rm "END rm($*)"
-    return $error_5
+    return $rc
 }
 
 # function to rename a file $1 into $2 in the MSS
@@ -241,54 +241,54 @@ mv () {
     # e.g: /usr/local/bin/rfrename rfioServerFoo:$1 rfioServerFoo:$2
     
     save_log mv "BEGIN mv($*)"
-    op_ph=$(type -P phobos)
-    op_sys=$(type -P rm)
+    phobos=$(type -P phobos)
+    rm=$(type -P rm)
     temp="/tmp/phobos_mv"
 
     # GET the object $1 into a temporary file.
-    ph_get_script="sudo $op_ph get ${1} ${temp}"
+    ph_get_script="sudo $phobos get ${1} ${temp}"
     ph_get=$($ph_get_script >> $LOGFILE_FANCY 2>&1)
-    error_6=$?
-    save_log mv "$ph_get_script return with status=$ph_get($error_6)"
-    if [ $error_6 == 0 ]; then
+    rc=$?
+    save_log mv "$ph_get_script return with status=$ph_get($rc)"
+    if [ $rc == 0 ]; then
         # PUT the file /tmp/phobos_mv into an object $2.
-        ph_put_script="sudo $op_ph put -f dir ${temp} ${2}"
+        ph_put_script="sudo $phobos put -f dir ${temp} ${2}"
         ph_put=$(ph_put_script >> $LOGFILE_FANCY 2>&1)
-        error_6=$?
-        save_log mv "$ph_put_script return with status=$ph_put($error_6)"
-        if [ $error_6 == 0 ]; then
+        rc=$?
+        save_log mv "$ph_put_script return with status=$ph_put($rc)"
+        if [ $rc == 0 ]; then
             # DEL the object $1 from phobos.
-            ph_del_script="sudo $op_ph del ${1}"
+            ph_del_script="sudo $phobos del ${1}"
             ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
-            error_6=$?
-            save_log mv "$ph_del_script return with status=$ph_del($error_6)"
-            if [ $error_6 == 0 ]; then
-                rm_temp_script="sudo $op_sys -f ${temp}"
+            rc=$?
+            save_log mv "$ph_del_script return with status=$ph_del($rc)"
+            if [ $rc == 0 ]; then
+                rm_temp_script="sudo $rm -f ${temp}"
                 rm_temp=$($rm_temp_script)
-		error_6=$?
-                save_log mv "$rm_temp return with status=$rm_temp($error_6)"
+	        rc=$?
+                save_log mv "$rm_temp return with status=$rm_temp($rc)"
             fi
         else # In case of failure, we still need to remove the temporary copy.
-            rm_temp_script="sudo $op_sys -f ${temp}"
+            rm_temp_script="sudo $rm -f ${temp}"
             rm_temp=$($rm_temp_script)
-            error_6=$?
-            save_log mv "$rm_temp return with status=$rm_temp($error_6)"
+            rc=$?
+            save_log mv "$rm_temp return with status=$rm_temp($rc)"
         fi
     else # In case of failure, we still need to remove the temporary copy, (if it happened to be created).
         if [ -f "$2" ]; then
-            rm_temp_script="sudo $op_sys -f ${temp}"
+            rm_temp_script="sudo $rm -f ${temp}"
 	    rm_temp=$($rm_temp_script)
-            error_6=$?
-            save_log mv "$rm_temp return with status=$rm_temp($error_6)"
+            rc=$?
+            save_log mv "$rm_temp return with status=$rm_temp($rc)"
         fi
     fi
 
-    if [ $error_6 != 0 ]; then
+    if [ $rc != 0 ]; then
         STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($error_6)"
+        save_log mv "STATUS=$STATUS($rc)"
     fi
     save_log mv "END mv($*)"
-    return $error_6
+    return $rc
 }
 
 # function to do a stat on a file $1 stored in phobos
@@ -296,33 +296,33 @@ stat () {
     # <your command to retrieve stats on the file> $1
     # e.g: output=$(/usr/local/bin/rfstat rfioServerFoo:$1)
     save_log stat "BEGIN stat($*)"
-    op_ph=$(type -P phobos)
-    json_output_script="sudo $op_ph object list ${1} -t -o user_md -f human"
+    phobos=$(type -P phobos)
+    json_output_script="sudo $phobos object list ${1} -t -o user_md -f human"
     json_output=$($json_output_script)
-    error_7=$?
-    save_log stat "$json_output_script return with status=$json_output($error_7)"
-    if [ $error_7 == 0 ]; then
+    rc=$?
+    save_log stat "$json_output_script return with status=$json_output($rc)"
+    if [ $rc == 0 ]; then
         keys_order=("device" "inode" "mode" "nlink" "uid" "gid" "devid" "size" "blksize" "blkcnt" "atime" "mtime" "ctime")
         irods_output=$(echo "$json_output" | jq -r --argjson keys "$(printf '%s\n' "${keys_order[@]}" | jq -R . | jq -s .)" '
   [
     . as $in | $keys[] | $in[.]
   ] | join(":")
 ')
-        error_7=$?
-	save_log stat "function ends with status=($error_7), exporting string:\n${irods_output}"
-        if [ $error_7 == 0 ]; then
+        rc=$?
+	save_log stat "function ends with status=($rc), exporting string:\n${irods_output}"
+        if [ $rc == 0 ]; then
             echo "${irods_output}"
         else
             echo "0:0:0:0:0:0:0:0:0:0:0:0:0"
         fi
     fi
     
-    if [ $error_7 != 0 ]; then
+    if [ $rc != 0 ]; then
         STATUS="FAILURE"
-        save_log stat "STATUS=$STATUS($error_7)"
+        save_log stat "STATUS=$STATUS($rc)"
     fi
     save_log stat "END stat($*)"
-    return $error_7
+    return $rc
 }
 
 #######################
@@ -372,46 +372,46 @@ save_log() {
 # If start fails, raises an error.
 get_phobosd() {
     save_log get_phobosd "BEGIN get_phobosd($*)"
-    op_ph=$(type -P phobos)
-    phd_ping_script="sudo $op_ph ping phobosd"
+    phobos=$(type -P phobos)
+    phd_ping_script="sudo $phobos ping phobosd"
     phd_ping=$($phd_ping_script >> $LOGFILE_FANCY 2>&1)
-    error_8=$?
-    save_log get_phobosd "$phd_ping_script return with status=$phd_ping($error_8)"
-    if [ $error_8 != 0 ]; then
+    rc=$?
+    save_log get_phobosd "$phd_ping_script return with status=$phd_ping($rc)"
+    if [ $rc != 0 ]; then
         # The ping failed. Try to start phobos daemon
         phd_start_script="sudo systemctl start phobosd"
         phd_start=$($phd_start_script)
-        error_8=$?
-        save_log get_phobosd "$phd_start_script return with status=$phd_start($error_8)"
-        if [ $error_8 == 0 ]; then
+        rc=$?
+        save_log get_phobosd "$phd_start_script return with status=$phd_start($rc)"
+        if [ $rc == 0 ]; then
             # Try to ping again phobosd after the start attempt
-            phd_ping_script="sudo $op_ph ping phobosd"
+            phd_ping_script="sudo $phobos ping phobosd"
             phd_ping=$($phd_ping_script >> $LOGFILE_FANCY 2>&1)
-            error_8=$?
-            save_log get_phobosd "$phd_ping_script return with status=$phd_ping($error_8)"
+            rc=$?
+            save_log get_phobosd "$phd_ping_script return with status=$phd_ping($rc)"
         else
             save_log get_phobosd "Impossible to communicate with Phobos daemon. Please check your Phobos and iRODS installation. Check that irods user has plain access to root privileges."
-            exit $error_8
+            exit $rc
         fi
     fi
 
-    if [ "$error_8" != 0 ]; then
+    if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
-        save_log get_phobosd "STATUS=$STATUS($error_8)"
+        save_log get_phobosd "STATUS=$STATUS($rc)"
     fi
     save_log get_phobosd "END get_phobosd($*)"
-    return $error_8
+    return $rc
 }
 
 # Get metadata on file $1 using $(stat), parsing it according to univMSS template, and return the output as a hash table.
 get_metadata() {
     save_log get_metadata "BEGIN get_metadata($*)"
-    op=$(type -P stat)
-    output_script="sudo $op ${1}"
+    stat=$(type -P stat)
+    output_script="sudo $stat ${1}"
     output=$($output_script)
-    error_9=$?
-    save_log get_metadata "$output_script return with status ${error_9} and output=\n${output}"
-    if [ $error_9 == 0 ]; then
+    rc=$?
+    save_log get_metadata "$output_script return with status ${rc} and output=\n${output}"
+    if [ $rc == 0 ]; then
         # parse the output.
         # Parameters to retrieve:
         #     "device"  - device ID of device containing file
@@ -451,7 +451,7 @@ get_metadata() {
     fi
 
     save_log get_metadata "END get_metadata($*)"
-    return $error_9
+    return $rc
 }
 
 
