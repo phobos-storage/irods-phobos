@@ -80,7 +80,7 @@ syncToArch () {
     if [ $rc == 0 ]; then
         phobos=$(type -P phobos)
         echo "UNIVMSS $phobos \"$1\" \"$2\""
-        put_script="sudo $phobos put --metadata ${md} -f dir ${1} ${2}"
+        put_script="sudo $phobos put --metadata ${md} ${1} ${2}"
         put=$($put_script >> $LOGFILE_FANCY 2>&1)
         rc=$?
         save_log syncToArch "$put_script return with status=$put($rc)"
@@ -252,7 +252,7 @@ _mv () {
         return $rc
     fi
     # PUT the file /tmp/phobos_mv into an object $2.
-    ph_put_script="sudo $phobos put -f dir ${temp} ${2}"
+    ph_put_script="sudo $phobos put ${temp} ${2}"
     ph_put=$(ph_put_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_put_script return with status=$ph_put($rc)"
