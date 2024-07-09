@@ -26,7 +26,7 @@
 # In order to be detected by iRODS, the present file is to be placed in
 # /var/lib/irods/msiExecCmd_bin/
 
-VERSION=v1.0
+VERSION=v1.1
 ID=$RANDOM
 STATUS="FINE"
 LEVEL=1
@@ -80,7 +80,7 @@ syncToArch () {
     if [ $rc == 0 ]; then
         phobos=$(type -P phobos)
         echo "UNIVMSS $phobos \"$1\" \"$2\""
-        put_script="sudo $phobos put --metadata ${md} -f dir ${1} ${2}"
+        put_script="sudo $phobos put --overwrite --metadata ${md} ${1} ${2}"
         put=$($put_script >> $LOGFILE_FANCY 2>&1)
         rc=$?
         save_log syncToArch "$put_script return with status=$put($rc)"
@@ -108,11 +108,9 @@ stageToCache () {
         rc=2
     fi
     if [ -f "$2" ]; then
-    # PRVEIOUSLY INTENDED BEHAVIOUR : Return an error if dest file exists.
-    #   save_log stageToCache "\"$2\" already exists. Can't export data to it."
-    #   rc=3
-    # DISCOVERED BEHAVIOUR : Remvoe the file that iRODS just created for us.
-        save_log stageToCache "\"$2\" already exists. I rm it for you, Dave <3"
+    # iRODS creates the destination cache file in advance for Phobos.
+    # This is a kind attention, but we have to remove it.
+        save_log stageToCache "\"$2\" already exists. Removing it"
         rm "$2"
         rc=$?
     fi
@@ -173,10 +171,9 @@ _chmod () {
 
 # function to remove a file $1 from Phobos.
 #
-# Phobos only implements a soft delete, that moves objects out of 
+# This function is a hard remove, like the POSIX one.
+# But Phobos only implements a soft delete, that moves objects out of 
 # its ``object`` DB table to its ``deprecated_object`` DB table.
-## IDEA : If iRODS trash works as we think it is, simlpy rename object as its
-## new destination trash repo : .../trash/.../object_name.sth
 _rm () {
     save_log rm "BEGIN rm($*)"
     rc=$?
@@ -199,7 +196,10 @@ _rm () {
     return $rc
 }
 
-# function to rename a file $1 into $2 in Phobos 
+# function to move and rename a file $1 into $2 in Phobos.
+#
+# Considering Phobos does not implement directories,
+# this function is only for renaming purposes.
 _mv () {
     save_log mv "BEGIN mv($*)"
     rc=$?
@@ -210,6 +210,12 @@ _mv () {
     if [ -z "$2" ]; then
         save_log mv "No new name given to rename object \"$1\""
         rc=2
+    fi
+    if [ $rc != 0 ]; then
+        STATUS="FAILURE"
+        save_log mv "STATUS=$STATUS($rc)"
+        save_log mv "END mv($*)"
+        return $rc
     fi
     ##########################################################################
     # TO BE ARRIVING SOON
@@ -229,16 +235,17 @@ _mv () {
     #return $rc
     #}
     ##########################################################################
-
+    
     # FOR NOW, PERFORMS A GET, PUT, DELETE
     phobos=$(type -P phobos)
-    temp=$(mktemp -u /temp/phobos_mv_XXXXXXXXXX)
+    temp=$(mktemp -u /tmp/phobos_mv_XXXXXXXXXX)
 
     # GET the object $1 into a temporary file.
     ph_get_script="sudo $phobos get ${1} ${temp}"
     ph_get=$($ph_get_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_get_script return with status=$ph_get($rc)"
+
     if [ $rc != 0 ]; then
         if [ -f "$2" ]; then
             rm_temp_script="sudo rm -f ${temp}"
@@ -248,25 +255,26 @@ _mv () {
         fi
         STATUS="FAILURE"
         save_log mv "STATUS=$STATUS($rc)"
-        save_log mv "END mv($*)"                                                    
+        save_log mv "END mv($*)"
         return $rc
     fi
+
     # PUT the file /tmp/phobos_mv into an object $2.
-    ph_put_script="sudo $phobos put -f dir ${temp} ${2}"
-    ph_put=$(ph_put_script >> $LOGFILE_FANCY 2>&1)
+    ph_put_script="sudo $phobos put ${temp} ${2}"
+    ph_put=$($ph_put_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_put_script return with status=$ph_put($rc)"
-    if [ $rc != 0 ]; then                                                       
-        if [ -f "$2" ]; then                                                    
-            rm_temp_script="sudo rm -f ${temp}"                                
-            rm_temp=$($rm_temp_script)                                          
-            rc2=$?                                                               
-            save_log mv "$rm_temp return with status=$rm_temp($rc2)"             
-        fi                                                                      
-        STATUS="FAILURE"                                                        
-        save_log mv "STATUS=$STATUS($rc)"                                       
-        save_log mv "END mv($*)"                                                
-        return $rc                                                              
+    if [ $rc != 0 ]; then
+        if [ -f "$2" ]; then
+            rm_temp_script="sudo rm -f ${temp}"
+            rm_temp=$($rm_temp_script)
+            rc2=$?
+            save_log mv "$rm_temp return with status=$rm_temp($rc2)"
+        fi
+        STATUS="FAILURE"
+        save_log mv "STATUS=$STATUS($rc)"
+        save_log mv "END mv($*)"
+        return $rc
     fi
     
     # DEL the object $1 from Phobos.
@@ -274,17 +282,17 @@ _mv () {
     ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_del_script return with status=$ph_del($rc)"
-    if [ $rc != 0 ]; then                                                       
-        if [ -f "$2" ]; then                                                    
-            rm_temp_script="sudo rm -f ${temp}"                                
-            rm_temp=$($rm_temp_script)                                          
-            rc2=$?                                                              
-            save_log mv "$rm_temp return with status=$rm_temp($rc2)"            
-        fi                                                                      
-        STATUS="FAILURE"                                                        
-        save_log mv "STATUS=$STATUS($rc)"                                       
-        save_log mv "END mv($*)"                                                
-        return $rc                                                              
+    if [ $rc != 0 ]; then 
+        if [ -f "$2" ]; then
+            rm_temp_script="sudo rm -f ${temp}"
+            rm_temp=$($rm_temp_script)
+            rc2=$?
+            save_log mv "$rm_temp return with status=$rm_temp($rc2)"
+        fi
+        STATUS="FAILURE"
+        save_log mv "STATUS=$STATUS($rc)"
+        save_log mv "END mv($*)"
+        return $rc 
     fi
 
     rm_temp_script="sudo rm -f ${temp}"
@@ -301,43 +309,51 @@ _mv () {
 }
 
 # function to do a stat on a file $1 stored in Phobos.
-# This function returns the required formated string that was recorded into 
-# the object's user_metadata field during PUT.
+#
+# This function returns the required formated string that was recorded into
+# the object's user_metadata field during syncToArch.
 _stat () {
     # <your command to retrieve stats on the file> $1
     # e.g: output=$(/usr/local/bin/rfstat rfioServerFoo:$1)
     save_log stat "BEGIN stat($*)"
-    rc=$?                                                                       
-    if [ -z "$1" ]; then                                                        
-        save_log stat "No object given to return status from"                                 
-        rc=1                                                                    
+    rc=$?
+    if [ -z "$1" ]; then
+        save_log stat "No object given to return status from"
+        rc=1
     fi
-    if [ $rc == 0 ]; then
-        phbs=$(type -P phobos)
-        json_outpt_script="sudo $phbs object list ${1} -t -o user_md -f human"
-        json_outpt=$($json_outpt_script)
-        rc=$?
-        save_log stat "$json_outpt_script return with status=$json_outpt($rc)"
+    if [ $rc != 0 ]; then
+        STATUS="FAILURE"
+        save_log stat "STATUS=$STATUS($rc)"
+        save_log stat "END stat($*)"
+        return $rc
     fi
-    if [ $rc == 0 ]; then
-        keys_order=("device" "inode" "mode" "nlink" "uid" "gid" "devid" "size"\
-           "blksize" "blkcnt" "atime" "mtime" "ctime")
-        irods_output=$(echo "$json_outpt" | jq -r --argjson keys "$(printf \
-                       '%s\n' "${keys_order[@]}" | jq -R . | jq -s .)" \
-		       '[ . as $in | $keys[] | $in[.] ] | join(":")')
-        rc=$?
-	    save_log stat "function ends with status=($rc), \
-                       exporting string:\n${irods_output}"
+    phbs=$(type -P phobos)
+    json_outpt_script="sudo $phbs object list $1 -t -o user_md -f human"
+    json_outpt=$($json_outpt_script)
+    rc=$?
+    save_log stat "$json_outpt_script return with status=$json_outpt($rc)"
+    if [ $rc != 0 ]; then
+        STATUS="FAILURE"
+        save_log stat "STATUS=$STATUS($rc)"
+        save_log stat "END stat($*)"
+        return $rc
     fi
+    if [ -z "$json_outpt" ]; then
+        save_log stat "Object $1 not found. return with status=$json_outpt(1)"
+        save_log stat "END stat($*)"
+        return 1
+    fi
+    keys_order=("device" "inode" "mode" "nlink" "uid" "gid" "devid" "size"\
+       "blksize" "blkcnt" "atime" "mtime" "ctime")
+    irods_output=$(echo "$json_outpt" | jq -r --argjson keys "$(printf \
+                   '%s\n' "${keys_order[@]}" | jq -R . | jq -s .)" \
+                   '[ . as $in | $keys[] | $in[.] ] | join(":")')
+    rc=$?
+    save_log stat "function ends with status=($rc), \
+                   exporting string:\n${irods_output}"
     if [ $rc == 0 ]; then
         echo "${irods_output}"
-    else
-        # It is highly recommended not to end up in this situation, 
-        # because iRODS process is likely to fail.
-        echo "0:0:0:0:0:0:0:0:0:0:0:0:0"
-    fi
-    
-    if [ $rc != 0 ]; then
+    else    
         STATUS="FAILURE"
         save_log stat "STATUS=$STATUS($rc)"
     fi
@@ -401,8 +417,8 @@ save_log() {
 #    rc=$?
 #    save_log start_phobosd "$phd_ping_scrpt return with status=$phd_ping($rc)"
 #    if [ $rc == 0 ]; then
-#        save_log start_phobosd "END get_phobosd($*)"                               
-#        return $rc 
+#        save_log start_phobosd "END get_phobosd($*)"     
+#        return $rc
 #    fi
 #    # The ping failed. Try to start Phobos daemon
 #    phd_start_script="sudo systemctl start phobosd"
@@ -433,9 +449,9 @@ save_log() {
 get_metadata() {
     save_log get_metadata "BEGIN get_metadata($*)"
     rc=$?
-    if [ -z "$1" ]; then                                                        
-        save_log get_metadata "No file given to get metadata from"                      
-        rc=1                                                                    
+    if [ -z "$1" ]; then
+        save_log get_metadata "No file given to get metadata from"
+        rc=1
     fi
     stat=$(type -P stat)
     output_script="sudo $stat ${1}"
@@ -499,7 +515,6 @@ get_metadata() {
     save_log get_metadata "END get_metadata($*)"
     return $rc
 }
-
 
 # Saving first logs to identify the session
 save_log ""
