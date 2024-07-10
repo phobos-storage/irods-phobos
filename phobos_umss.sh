@@ -240,9 +240,12 @@ _mv () {
     phobos=$(type -P phobos)
     temp=$(mktemp -u /tmp/phobos_mv_XXXXXXXXXX)
 
-    # GET the object $1 into a temporary file.
+    # GET the object $1 into a temporary file, and its metadata into a variable
     ph_get_script="sudo $phobos get ${1} ${temp}"
     ph_get=$($ph_get_script >> $LOGFILE_FANCY 2>&1)
+    get_md_script="sudo $phobos object list $1 -t -o user_md -f human"
+    metadata=$(echo "$(get_md_script)" | jq -r\
+        'to_entries | map("\(.key)=\(.value)") | join(",")')
     rc=$?
     save_log mv "$ph_get_script return with status=$ph_get($rc)"
 
@@ -260,7 +263,7 @@ _mv () {
     fi
 
     # PUT the file /tmp/phobos_mv into an object $2.
-    ph_put_script="sudo $phobos put ${temp} ${2}"
+    ph_put_script="sudo $phobos put --metadata ${metadata} ${temp} ${2}"
     ph_put=$($ph_put_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_put_script return with status=$ph_put($rc)"
