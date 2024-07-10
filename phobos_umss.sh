@@ -26,7 +26,7 @@
 # In order to be detected by iRODS, the present file is to be placed in
 # /var/lib/irods/msiExecCmd_bin/
 
-VERSION=v1.1
+VERSION=v1.2
 ID=$RANDOM
 STATUS="FINE"
 LEVEL=1
@@ -57,6 +57,13 @@ Purple=$(tput setaf 5)
 # function for the synchronization of file $1 on local disk resource
 # (i.e. the cache child of the Compound Resource) to file $2 in Phobos
 syncToArch () {
+    local rc
+    local STATUS
+    local md_script
+    local md
+    local phobos
+    local put_script
+    local put
     save_log syncToArch "BEGIN syncToArch($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -67,7 +74,7 @@ syncToArch () {
         save_log syncToArch "No OID given to put object \"$1\" to"
         rc=2
     fi
-    
+
     # Get metadata from source.
     if [ $rc == 0 ]; then
         md_script="get_metadata ${1}"
@@ -85,7 +92,7 @@ syncToArch () {
         rc=$?
         save_log syncToArch "$put_script return with status=$put($rc)"
     fi
-    
+
     if [ "$rc" != 0 ]; then
         STATUS="FAILURE"
         save_log syncToArch "STATUS=$STATUS($rc)"
@@ -97,6 +104,11 @@ syncToArch () {
 # function for staging a file $1 from Phobos to file $2 on disk
 # (i.e. on the cache child of the Compound Resource).
 stageToCache () {
+    local rc
+    local STATUS
+    local phobos
+    local get_script
+    local get
     save_log stageToCache "BEGIN stageToCache($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -114,7 +126,7 @@ stageToCache () {
         rm "$2"
         rc=$?
     fi
-    
+
     # Get the object.
     if [ "$rc" == 0 ]; then
         phobos=$(type -P phobos)
@@ -139,6 +151,8 @@ stageToCache () {
 # And Phobos media/devices/dirs management is not to be done using iRODS.
 # So this function does nothing.
 _mkdir () {
+    local rc
+    local STATUS
     save_log mkdir "BEGIN mkdir($*)"
     rc=$?
     if [ "$rc" != 0 ]; then
@@ -149,16 +163,18 @@ _mkdir () {
     return $rc
 }
 
-# function to modify ACLs $2 (octal) in the 
+# function to modify ACLs $2 (octal) in the
 # MSS logical name space for a given directory $1.
 #
 # Phobos authorisations have nothing to do with iRODS/POSIX authorisations,
-# as this function is used to manage. For further explanations, cf. 
+# as this function is used to manage. For further explanations, cf.
 # `phobos-storage/phobos/doc/design/admin_resource_operation_control.md`.
 # Considering Phobos cannot manage subsirectories, it is also unsafe to call
 # for POSIX chmod.
 # So this function does nothing.
 _chmod () {
+    local rc
+    local STATUS
     save_log chmod "BEGIN chmod($*)"
     rc=$?
     if [ "$rc" != 0 ]; then
@@ -169,12 +185,17 @@ _chmod () {
     return $rc
 }
 
-# function to remove a file $1 from Phobos.
+# function to remove object $1 from Phobos.
 #
 # This function is a hard remove, like the POSIX one.
-# But Phobos only implements a soft delete, that moves objects out of 
+# But Phobos only implements a soft delete, that moves objects out of
 # its ``object`` DB table to its ``deprecated_object`` DB table.
 _rm () {
+    local rc
+    local STATUS
+    local phobos
+    local ph_del_script
+    local ph_del
     save_log rm "BEGIN rm($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -201,6 +222,22 @@ _rm () {
 # Considering Phobos does not implement directories,
 # this function is only for renaming purposes.
 _mv () {
+    local rc
+    local STATUS
+    local phobos
+    #local ph_rename_script
+    #local ph_rename
+    local temp
+    local ph_get_script
+    local ph_get
+    local get_md_script
+    local metadata
+    local rm_temp_script
+    local rm_temp
+    local ph_put_script
+    local ph_put
+    local ph_del_script
+    local ph_del
     save_log mv "BEGIN mv($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -224,7 +261,7 @@ _mv () {
     #    ph_rename_script="sudo $phobos rename ${1} ${2}"
     #    ph_rename=$($ph_rename_script >> $LOGFILE_FANCY 2>&1)
     #    rc=$?
-    #    save_log mv "$ph_rename_script return with status=$ph_rename($rc)" 
+    #    save_log mv "$ph_rename_script return with status=$ph_rename($rc)"
     #fi
     #
     #if [ $rc != 0 ]; then
@@ -235,7 +272,7 @@ _mv () {
     #return $rc
     #}
     ##########################################################################
-    
+
     # FOR NOW, PERFORMS A GET, PUT, DELETE
     phobos=$(type -P phobos)
     temp=$(mktemp -u /tmp/phobos_mv_XXXXXXXXXX)
@@ -244,7 +281,8 @@ _mv () {
     ph_get_script="sudo $phobos get ${1} ${temp}"
     ph_get=$($ph_get_script >> $LOGFILE_FANCY 2>&1)
     get_md_script="sudo $phobos object list $1 -t -o user_md -f human"
-    metadata=$(echo "$(get_md_script)" | jq -r\
+    # shellcheck disable=SC2005
+    metadata=$(echo "$($get_md_script)" | jq -r\
         'to_entries | map("\(.key)=\(.value)") | join(",")')
     rc=$?
     save_log mv "$ph_get_script return with status=$ph_get($rc)"
@@ -279,13 +317,13 @@ _mv () {
         save_log mv "END mv($*)"
         return $rc
     fi
-    
+
     # DEL the object $1 from Phobos.
     ph_del_script="sudo $phobos del ${1}"
     ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
     rc=$?
     save_log mv "$ph_del_script return with status=$ph_del($rc)"
-    if [ $rc != 0 ]; then 
+    if [ $rc != 0 ]; then
         if [ -f "$2" ]; then
             rm_temp_script="sudo rm -f ${temp}"
             rm_temp=$($rm_temp_script)
@@ -295,14 +333,14 @@ _mv () {
         STATUS="FAILURE"
         save_log mv "STATUS=$STATUS($rc)"
         save_log mv "END mv($*)"
-        return $rc 
+        return $rc
     fi
 
     rm_temp_script="sudo rm -f ${temp}"
     rm_temp=$($rm_temp_script)
-	rc=$?
+    rc=$?
     save_log mv "$rm_temp return with status=$rm_temp($rc)"
-    
+
     if [ $rc != 0 ]; then
         STATUS="FAILURE"
         save_log mv "STATUS=$STATUS($rc)"
@@ -318,6 +356,13 @@ _mv () {
 _stat () {
     # <your command to retrieve stats on the file> $1
     # e.g: output=$(/usr/local/bin/rfstat rfioServerFoo:$1)
+    local rc
+    local STATUS
+    local phbs
+    local json_outpt_script
+    local json_outpt
+    local keys_order
+    local irods_output
     save_log stat "BEGIN stat($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -356,7 +401,7 @@ _stat () {
                    exporting string:\n${irods_output}"
     if [ $rc == 0 ]; then
         echo "${irods_output}"
-    else    
+    else
         STATUS="FAILURE"
         save_log stat "STATUS=$STATUS($rc)"
     fi
@@ -373,7 +418,10 @@ save_log() {
     if [ $LEVEL -ne $DEBUG ]; then
         return 0
     fi
-    
+    local timestamp
+    local message_colour
+    local message_black
+
     timestamp=$(date +"%Y:%m:%d-%T.%N")
     # Messages building
     if [ "$2" ]; then
@@ -420,7 +468,7 @@ save_log() {
 #    rc=$?
 #    save_log start_phobosd "$phd_ping_scrpt return with status=$phd_ping($rc)"
 #    if [ $rc == 0 ]; then
-#        save_log start_phobosd "END get_phobosd($*)"     
+#        save_log start_phobosd "END get_phobosd($*)"
 #        return $rc
 #    fi
 #    # The ping failed. Try to start Phobos daemon
@@ -447,9 +495,15 @@ save_log() {
 #    return $rc
 #}
 
-# Get metadata stores in user_md, parse it according to univMSS template, 
+# Get metadata stores in user_md, parse it according to univMSS template,
 # and return the output as a hash table.
 get_metadata() {
+    local rc
+    local STATUS
+    local stat
+    local output_script
+    local output
+    local md_str
     save_log get_metadata "BEGIN get_metadata($*)"
     rc=$?
     if [ -z "$1" ]; then
@@ -489,26 +543,26 @@ get_metadata() {
     #         hh = 0 to 24, mm = 0 to 59, ss = 0 to 59
     md_str=""
     md_str+="device=$( echo "$output" | sed -nr \
-	    's/.*\<Device: *(\S*)\>.*/\1/p'),"
+        's/.*\<Device: *(\S*)\>.*/\1/p'),"
     md_str+="inode=$(  echo "$output" | sed -nr \
-	    's/.*\<Inode: *(\S*)\>.*/\1/p'),"
+        's/.*\<Inode: *(\S*)\>.*/\1/p'),"
     md_str+="mode=$(   echo "$output" | sed -nr \
-	    's/.*\<Access: *\(([0-9]*)\/.*/\1/p'),"
+        's/.*\<Access: *\(([0-9]*)\/.*/\1/p'),"
     md_str+="nlink=$(  echo "$output" | sed -nr \
-	    's/.*\<Links: *([0-9]*)\>.*/\1/p'),"
+        's/.*\<Links: *([0-9]*)\>.*/\1/p'),"
     md_str+="uid=$(    echo "$output" | sed -nr \
-	    's/.*\<Uid: *\( *([0-9]*)\/.*/\1/p'),"
+        's/.*\<Uid: *\( *([0-9]*)\/.*/\1/p'),"
     md_str+="gid=$(    echo "$output" | sed -nr \
-	    's/.*\<Gid: *\( *([0-9]*)\/.*/\1/p'),"
+        's/.*\<Gid: *\( *([0-9]*)\/.*/\1/p'),"
     md_str+="devid=0,"
     md_str+="size=$(   echo "$output" | sed -nr \
-	    's/.*\<Size: *([0-9]*)\>.*/\1/p'),"
+        's/.*\<Size: *([0-9]*)\>.*/\1/p'),"
     md_str+="blksize=$(echo "$output" | sed -nr \
         's/.*\<IO Block: *([0-9]*)\>.*/\1/p'),"
     md_str+="blkcnt=$( echo "$output" | sed -nr \
-	    's/.*\<Blocks: *([0-9]*)\>.*/\1/p'),"
+        's/.*\<Blocks: *([0-9]*)\>.*/\1/p'),"
     md_str+="atime=$(  echo "$output" | sed -nr \
-	    's/.*\<Access: *([0-9]{4,}-[01][0-9]-[0-3][0-9]) *([0-2][0-9]):([0-5][0-9]):([0-6][0-9])\..*/\1-\2.\3.\4/p'),"
+        's/.*\<Access: *([0-9]{4,}-[01][0-9]-[0-3][0-9]) *([0-2][0-9]):([0-5][0-9]):([0-6][0-9])\..*/\1-\2.\3.\4/p'),"
     md_str+="mtime=$(  echo "$output" | sed -nr \
         's/.*\<Modify: *([0-9]{4,}-[01][0-9]-[0-3][0-9]) *([0-2][0-9]):([0-5][0-9]):([0-6][0-9])\..*/\1-\2.\3.\4/p'),"
     md_str+="ctime=$(  echo "$output" | sed -nr \

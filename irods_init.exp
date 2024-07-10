@@ -1,0 +1,41 @@
+#!/bin/expect -d
+
+log_user 0
+
+set zone_ipad [lindex $argv 0]
+set zone_port [lindex $argv 1]
+set user_name [lindex $argv 2]
+set zone_name [lindex $argv 3]
+set user_pswd [lindex $argv 4]
+
+spawn iinit
+expect {
+    "Enter the host name (DNS) of the server to connect to: " {
+        send "${zone_ipad}\r"
+        expect "${zone_ipad}\r\n"
+        exp_continue
+    }
+    "Enter the port number " {
+        send "${zone_port}\r"
+        expect "${zone_port}\r\n"
+        exp_continue
+    }
+    "Enter your iRODS user name: " {
+        send "${user_name}\r"
+        expect "${user_name}\r\n"
+        exp_continue
+    }
+    "Enter your iRODS zone: " {
+        send "${zone_name}\r"
+        expect "${zone_name}\r\n"
+        exp_continue
+    }
+    "Enter your current iRODS password:" { #Yes, there is no dangling space at
+        # the end of this string. Don't ask me why !
+        send "${user_pswd}\r"
+        expect "\r\n"
+        exp_continue
+    }
+    eof
+}
+interact
