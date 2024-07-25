@@ -26,7 +26,7 @@
 # In order to be detected by iRODS, the present file is to be placed in
 # /var/lib/irods/msiExecCmd_bin/
 
-VERSION=v1.2
+VERSION=v1.0
 ID=$RANDOM
 STATUS="FINE"
 LEVEL=1
@@ -35,12 +35,9 @@ DISPLAY=0
 DISPLAY_COLOUR=1
 DISPLAY_BLACK=0
 
-LOGFILE_FANCY=/var/lib/irods/$VERSION.log
-#LOGFILE_SOBRE=/var/lib/irods/$VERSION.txt
-sudo touch $LOGFILE_FANCY
-#sudo touch $LOGFILE_SOBRE
-sudo chown "$(whoami)":"$(whoami)" $LOGFILE_FANCY
-#sudo chown "$(whoami)":"$(whoami)" $LOGFILE_SOBRE
+LOGFILE=/var/lib/irods/$VERSION.log
+sudo touch $LOGFILE
+sudo chown "$(whoami)":"$(whoami)" $LOGFILE
 
 # FANCY COLORS
 Color_Off=$(tput sgr0)
@@ -58,14 +55,13 @@ Purple=$(tput setaf 5)
 # (i.e. the cache child of the Compound Resource) to file $2 in Phobos
 syncToArch () {
     local rc
-    local STATUS
     local md_script
     local md
     local phobos
     local put_script
     local put
     save_log syncToArch "BEGIN syncToArch($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log syncToArch "No object given to put"
         rc=1
@@ -88,14 +84,13 @@ syncToArch () {
         phobos=$(type -P phobos)
         echo "UNIVMSS $phobos \"$1\" \"$2\""
         put_script="sudo $phobos put --overwrite --metadata ${md} ${1} ${2}"
-        put=$($put_script >> $LOGFILE_FANCY 2>&1)
+        put=$($put_script >> $LOGFILE 2>&1)
         rc=$?
         save_log syncToArch "$put_script return with status=$put($rc)"
     fi
 
     if [ "$rc" != 0 ]; then
-        STATUS="FAILURE"
-        save_log syncToArch "STATUS=$STATUS($rc)"
+        record_failure syncToArch "$rc"
     fi
     save_log syncToArch "END syncToArch($*)"
     return $rc
@@ -105,12 +100,11 @@ syncToArch () {
 # (i.e. on the cache child of the Compound Resource).
 stageToCache () {
     local rc
-    local STATUS
     local phobos
     local get_script
     local get
     save_log stageToCache "BEGIN stageToCache($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log stageToCache "No object to get"
         rc=1
@@ -132,14 +126,13 @@ stageToCache () {
         phobos=$(type -P phobos)
         echo "UNIVMSS $phobos \"$1\" \"$2\""
         get_script="sudo $phobos get ${1} ${2}"
-        get=$($get_script >> $LOGFILE_FANCY 2>&1)
+        get=$($get_script >> $LOGFILE 2>&1)
         rc=$?
         save_log stageToCache "$get_script return with status=$get($rc)"
     fi
 
     if [ "$rc" != 0 ]; then
-        STATUS="FAILURE"
-        save_log stageToCache "STATUS=$STATUS($rc)"
+        record_failure stageToCache "$rc"
     fi
     save_log stageToCache "END stageToCache($*)"
     return $rc
@@ -152,12 +145,10 @@ stageToCache () {
 # So this function does nothing.
 _mkdir () {
     local rc
-    local STATUS
     save_log mkdir "BEGIN mkdir($*)"
-    rc=$?
+    rc=0
     if [ "$rc" != 0 ]; then
-        STATUS="FAILURE"
-        save_log mkdir "STATUS=$STATUS($rc)"
+        record_failure mkdir "$rc"
     fi
     save_log mkdir "END mkdir($*)"
     return $rc
@@ -169,35 +160,33 @@ _mkdir () {
 # Phobos authorisations have nothing to do with iRODS/POSIX authorisations,
 # as this function is used to manage. For further explanations, cf.
 # `phobos-storage/phobos/doc/design/admin_resource_operation_control.md`.
-# Considering Phobos cannot manage subsirectories, it is also unsafe to call
+# Considering Phobos cannot manage subdirectories, it is also unsafe to call
 # for POSIX chmod.
 # So this function does nothing.
 _chmod () {
     local rc
-    local STATUS
     save_log chmod "BEGIN chmod($*)"
-    rc=$?
+    rc=0
     if [ "$rc" != 0 ]; then
-        STATUS="FAILURE"
-        save_log chmod "STATUS=$STATUS($rc)"
+        record_failure chmod "$rc"
     fi
     save_log chmod "END chmod($*)"
     return $rc
 }
 
 # function to remove object $1 from Phobos.
+# There is no way to remove a directory in a UMSS.
 #
 # This function is a hard remove, like the POSIX one.
 # But Phobos only implements a soft delete, that moves objects out of
 # its ``object`` DB table to its ``deprecated_object`` DB table.
 _rm () {
     local rc
-    local STATUS
     local phobos
     local ph_del_script
     local ph_del
     save_log rm "BEGIN rm($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log rm "No object given to remove"
         rc=1
@@ -205,13 +194,12 @@ _rm () {
     if [ $rc == 0 ]; then
         phobos=$(type -P phobos)
         ph_del_script="sudo $phobos del ${1}"
-        ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
+        ph_del=$($ph_del_script >> $LOGFILE 2>&1)
         rc=$?
         save_log rm "$ph_del_script return with status=$ph_del($rc)"
     fi
     if [ "$rc" != 0 ]; then
-        STATUS="FAILURE"
-        save_log rm "STATUS=$STATUS($rc)"
+        record_failure rm "$rc"
     fi
     save_log rm "END rm($*)"
     return $rc
@@ -223,7 +211,6 @@ _rm () {
 # this function is only for renaming purposes.
 _mv () {
     local rc
-    local STATUS
     local phobos
     #local ph_rename_script
     #local ph_rename
@@ -239,7 +226,7 @@ _mv () {
     local ph_del_script
     local ph_del
     save_log mv "BEGIN mv($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log mv "No object given to rename"
         rc=1
@@ -249,8 +236,7 @@ _mv () {
         rc=2
     fi
     if [ $rc != 0 ]; then
-        STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($rc)"
+        record_failure mv "$rc"
         save_log mv "END mv($*)"
         return $rc
     fi
@@ -259,15 +245,14 @@ _mv () {
     #if [ $rc == 0 ]; then
     #    phobos=$(type -P phobos)
     #    ph_rename_script="sudo $phobos rename ${1} ${2}"
-    #    ph_rename=$($ph_rename_script >> $LOGFILE_FANCY 2>&1)
-    #    rc=$?
+    #    ph_rename=$($ph_rename_script >> $LOGFILE 2>&1)
+    #    rc=0
     #    save_log mv "$ph_rename_script return with status=$ph_rename($rc)"
     #fi
     #
     #if [ $rc != 0 ]; then
-    #    STATUS="FAILURE"
-    #    save_log mv "STATUS=$STATUS($rc)"
-    #if
+    #    record_failure mv"$rc"
+    #fi
     #save_log mv "END mv($*)"
     #return $rc
     #}
@@ -279,7 +264,7 @@ _mv () {
 
     # GET the object $1 into a temporary file, and its metadata into a variable
     ph_get_script="sudo $phobos get ${1} ${temp}"
-    ph_get=$($ph_get_script >> $LOGFILE_FANCY 2>&1)
+    ph_get=$($ph_get_script >> $LOGFILE 2>&1)
     get_md_script="sudo $phobos object list $1 -t -o user_md -f human"
     # shellcheck disable=SC2005
     metadata=$(echo "$($get_md_script)" | jq -r\
@@ -294,15 +279,14 @@ _mv () {
             rc2=$?
             save_log mv "$rm_temp return with status=$rm_temp($rc2)"
         fi
-        STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($rc)"
+        record_failure mv "$rc"
         save_log mv "END mv($*)"
         return $rc
     fi
 
     # PUT the file /tmp/phobos_mv into an object $2.
     ph_put_script="sudo $phobos put --metadata ${metadata} ${temp} ${2}"
-    ph_put=$($ph_put_script >> $LOGFILE_FANCY 2>&1)
+    ph_put=$($ph_put_script >> $LOGFILE 2>&1)
     rc=$?
     save_log mv "$ph_put_script return with status=$ph_put($rc)"
     if [ $rc != 0 ]; then
@@ -312,15 +296,14 @@ _mv () {
             rc2=$?
             save_log mv "$rm_temp return with status=$rm_temp($rc2)"
         fi
-        STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($rc)"
+        record_failure mv "$rc"
         save_log mv "END mv($*)"
         return $rc
     fi
 
     # DEL the object $1 from Phobos.
     ph_del_script="sudo $phobos del ${1}"
-    ph_del=$($ph_del_script >> $LOGFILE_FANCY 2>&1)
+    ph_del=$($ph_del_script >> $LOGFILE 2>&1)
     rc=$?
     save_log mv "$ph_del_script return with status=$ph_del($rc)"
     if [ $rc != 0 ]; then
@@ -330,8 +313,7 @@ _mv () {
             rc2=$?
             save_log mv "$rm_temp return with status=$rm_temp($rc2)"
         fi
-        STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($rc)"
+        record_failure mv "$rc"
         save_log mv "END mv($*)"
         return $rc
     fi
@@ -342,8 +324,7 @@ _mv () {
     save_log mv "$rm_temp return with status=$rm_temp($rc)"
 
     if [ $rc != 0 ]; then
-        STATUS="FAILURE"
-        save_log mv "STATUS=$STATUS($rc)"
+        record_failure mv "$rc"
     fi
     save_log mv "END mv($*)"
     return $rc
@@ -357,21 +338,19 @@ _stat () {
     # <your command to retrieve stats on the file> $1
     # e.g: output=$(/usr/local/bin/rfstat rfioServerFoo:$1)
     local rc
-    local STATUS
     local phbs
     local json_outpt_script
     local json_outpt
     local keys_order
     local irods_output
     save_log stat "BEGIN stat($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log stat "No object given to return status from"
         rc=1
     fi
     if [ $rc != 0 ]; then
-        STATUS="FAILURE"
-        save_log stat "STATUS=$STATUS($rc)"
+        record_failure stat "$rc"
         save_log stat "END stat($*)"
         return $rc
     fi
@@ -381,8 +360,7 @@ _stat () {
     rc=$?
     save_log stat "$json_outpt_script return with status=$json_outpt($rc)"
     if [ $rc != 0 ]; then
-        STATUS="FAILURE"
-        save_log stat "STATUS=$STATUS($rc)"
+        record_failure stat "$rc"
         save_log stat "END stat($*)"
         return $rc
     fi
@@ -402,8 +380,7 @@ _stat () {
     if [ $rc == 0 ]; then
         echo "${irods_output}"
     else
-        STATUS="FAILURE"
-        save_log stat "STATUS=$STATUS($rc)"
+        record_failure stat "$rc"
     fi
     save_log stat "END stat($*)"
     return $rc
@@ -425,8 +402,8 @@ save_log() {
     timestamp=$(date +"%Y:%m:%d-%T.%N")
     # Messages building
     if [ "$2" ]; then
-        message_colour="${Black}${ID} ${Green}[${timestamp}] \
-                        ${Red}${1}(${Blue}${2}${Red})${Color_Off}"
+        message_colour="${Black}${ID} ${Green}[${timestamp}]\t"
+        message_colour+="${Red}${1}(${Blue}${2}${Red})${Color_Off}"
         message_black="${ID} [${timestamp}] ${1}(${2})"
     else
         message_colour="${Black}${ID} ${Red}${1}${Color_Off}"
@@ -434,15 +411,9 @@ save_log() {
     fi
 
     # Message(s) writing on file(s)
-    if [ -n "${LOGFILE_FANCY+x}" ]; then
-        if [ "$LOGFILE_FANCY" != "" ]; then
-            echo -e "$message_colour" >> "$LOGFILE_FANCY"
-        fi
-    fi
-
-    if [ -n "${LOGFILE_SOBRE+x}" ]; then
-        if [ "$LOGFILE_SOBRE" != "" ]; then
-            echo -e "$message_black" >> "$LOGFILE_SOBRE"
+    if [ -n "${LOGFILE+x}" ]; then
+        if [ "$LOGFILE" != "" ]; then
+            echo -e "$message_colour" >> "$LOGFILE"
         fi
     fi
 
@@ -458,54 +429,21 @@ save_log() {
     return 0
 }
 
-# Checks whether Phobos daemon is started. If not, tries to start it.
-# If start fails, raises an error.
-#start_phobosd() {
-#    save_log start_phobosd "BEGIN get_phobosd($*)"
-#    phobos=$(type -P phobos)
-#    phd_ping_scrpt="sudo $phobos ping phobosd"
-#    phd_ping=$($phd_ping_script >> $LOGFILE_FANCY 2>&1)
-#    rc=$?
-#    save_log start_phobosd "$phd_ping_scrpt return with status=$phd_ping($rc)"
-#    if [ $rc == 0 ]; then
-#        save_log start_phobosd "END get_phobosd($*)"
-#        return $rc
-#    fi
-#    # The ping failed. Try to start Phobos daemon
-#    phd_start_script="sudo systemctl start phobosd"
-#    phd_start=$($phd_start_script)
-#    rc=$?
-#    save_log start_phobosd "$phd_start_script return with \
-#                            status=$phd_start($rc)"
-#    if [ $rc != 0 ]; then
-#        save_log start_phobosd "END get_phobosd($*)"
-#        return $rc
-#    fi
-#    # Try to ping again phobosd after the start attempt
-#    phd_ping_scrpt="sudo $phobos ping phobosd"
-#    phd_ping=$($phd_ping_script >> $LOGFILE_FANCY 2>&1)
-#    rc=$?
-#    save_log start_phobosd "$phd_ping_scrpt return with status=$phd_ping($rc)"
-#
-#    if [ "$rc" != 0 ]; then
-#        STATUS="FAILURE"
-#        save_log start_phobosd "STATUS=$STATUS($rc)"
-#    fi
-#    save_log start_phobosd "END get_phobosd($*)"
-#    return $rc
-#}
+record_failure() {
+    STATUS="FAILURE"
+    save_log "${1}" "STATUS=${STATUS}(${2})"
+}
 
 # Get metadata stores in user_md, parse it according to univMSS template,
 # and return the output as a hash table.
 get_metadata() {
     local rc
-    local STATUS
     local stat
     local output_script
     local output
     local md_str
     save_log get_metadata "BEGIN get_metadata($*)"
-    rc=$?
+    rc=0
     if [ -z "$1" ]; then
         save_log get_metadata "No file given to get metadata from"
         rc=1
@@ -582,10 +520,6 @@ if [ $DISPLAY_COLOUR == 1 ]; then save_log "$Blue$0_$Purple$VERSION"; fi
 if [ $DISPLAY_BLACK == 1 ]; then save_log "$0_$VERSION"; fi
 
 
-
-#############################################
-# below this line, nothing should be changed.
-#############################################
 
 case "$1" in
     syncToArch ) "syncToArch" "$2" "$3" ;;

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  All rights reserved (c) 2014-2022 CEA/DAM.
+#  All rights reserved (c) 2014-2024 CEA/DAM.
 #
 #  This file is part of Phobos.
 #
@@ -17,34 +17,47 @@
 #  You should have received a copy of the GNU Lesser General Public License
 #  along with Phobos. If not, see <http://www.gnu.org/licenses/>.
 #
-
+#
+####
+########
+############
+################
+####################
 # This file contains unit tests related to the Phobos UnivMSS plugin for iRODS.
 #
-####
-########
-############
-# This file is to be run using the shUnit2 framework:
-# "https://github.com/kward/shunit2"
-# The absolute path to the shUnit2 executable file must be set below.
-# Note that Phobos commands require super-user prvileges to run.
+# In order to run correctly, it should be given access to an iRODS and a Phobos
+# instance and all the parameters defined in the "GENERAL SET UP" section of
+# function `main`, right below.
 #
-# This script can automate the connexion to iRODS as a given user, using the
-# `irods_init.exp` script, which requires the Linux `expect` tool installed
-# to work: "https://github.com/aeruder/expect". Its path should also be given
-# below.
+# Noatbly, this script automates the connexion to iRODS as a given user, using
+# the `irods_init.exp` script, which requires the Linux `expect` tool installed
+# to work: "https://github.com/aeruder/expect".
+# If you don't want to use this feature, you can remove it by muting the call
+# to `irods_init.exp`, and those to `iexit full` and `rm -f "${irods_env}"`,
+# all in `main` function.
+#
+# Note that some operations are expected to fail, so iRODS and your system will
+# (sometimes) print error messages on the console. If an unexpected situation
+# occurs, the test set will display red messages.
+####################
+################
 ############
 ########
 ####
 #
-############################################################################
-# PLEASE ENTER HERE THE ABSOLUTE PATH TO IRODS_INIT FILE
-irods_init="/root/shunit2-2.1.8/examples/irods_init.exp"
-# PLEASE ENTER HERE THE ABSOLUTE PATH TO SHUNIT2 EXECUTABLE
-shunit2="/root/shunit2-2.1.8/shunit2"
-############################################################################
 
-# Run once before all tests.
-oneTimeSetUp() {
+failure=0 # Global flag, used to say iff a test failed.
+
+# Fancy Colours !
+Color_Off=$(tput sgr0)
+Red=$(tput setaf 1)
+Green=$(tput setaf 2)
+Blue=$(tput setaf 4)
+
+main() {
+    #### GENERAL SET UP
+    # Name and path of the irods_init except script
+    irods_init="/root/shunit2-2.1.8/examples/irods_init.exp"
     # Name and path of the UMMS script to test
     umssRepo="/var/lib/irods/msiExecCmd_bin" #Default path
     umssName="phobos_mss_20240506.sh"
@@ -66,6 +79,7 @@ oneTimeSetUp() {
     archiveResc="${archiveRescRepo}/${archiveRescName}"
 
     # Info about the iRODS users registered on the zone
+    irods_env="/root/.irods/irods_environment.json"
     adminName="rods" #Default in iRODS tutorial
     adminPswd="rods" #Default in iRODS tutorial
     non_adminName="alice"
@@ -78,14 +92,16 @@ oneTimeSetUp() {
     # Init the Phobos and iRODS environment.
     systemctl start phobosd
     expect "${irods_init}" "${zoneIP}" "${zonePort}" "${userName}"\
-    "${zoneName}" "${userPswd}" >> /dev/null 2>&1
+    "${zoneName}" "${userPswd}" >> /logs.txt 2>&1
+
+    # Listing all "test_" functions of the script
+    tests=$(declare -F | awk '{print $3}' | grep -E "^test_")
 
     # Init some files and directories to play with.
-    counter=0
     mkdir -p ./testFiles/dir_0/dir_0_0
     mkdir -p ./testFiles/dir_1
-    n=30
-    for ((k=0; k<n; k++)); do
+    n_tests=$(echo "${tests}" | wc -l)
+    for ((k=0; k<n_tests; k++)); do
         local f
         f="./testFiles/file_${k}.txt"
         echo "This '${k}' is provided to you by file_${k}." > "$f"
@@ -96,38 +112,77 @@ oneTimeSetUp() {
         f="./testFiles/dir_1/file_1_${k}.txt"
         echo "This '${k}' is provided to you by file_1_${k}." > "$f"
     done
-    return 0
-}
+    counter=0
+    n_failed=0
 
-# Run once after all tests.
-oneTimeTearDown() {
+    #### EXECUTE EACH TEST ONE BY ONE
+    for test in ${tests}; do
+        failure=0
+        printf "\n${Blue}TEST N°%s/%s: EXECUTING %s${Color_Off}\n"\
+        "$((counter+1))" "${n_tests}" "${test}"
+        ${test}
+        counter=$((counter+1))
+        if [ "${failure}" != 0 ]; then
+            n_failed=$((n_failed+1))
+            printf "${Red}TEST %s FAILED${Color_Off}\n" "${test}"
+        fi
+    done
+    printf "${Green}SUMMARY:\n%s/%s TESTS FAILED, %s SUCCEEDED.${Color_Off}\n"\
+    "${n_failed}" "${n_tests}" "$((n_tests - n_failed))"
+
+    #### CLEANING AND EXITING
     rm -fr ./testFiles
-    #systemctl stop phobosd
+    systemctl stop phobosd
     iexit full
-    rm -f /root/.irods/irods_environment.json
-    return 0
+    rm -f "${irods_env}"
+
+    exit "${n_failed}"
 }
 
-# Run before each test.
-setUp() {
-    return 0
-}
+####
+########
+# The assertSomething functions are helper functions that test a condition on
+# their last argument(s). If the result does not correspond to what is awaited,
+# the string given as first argument is returned.
+####
 
-# Run after each test.
-tearDown() {
-    counter=$((counter+1))
-    if [ ${counter} -ge ${n} ]; then
-        echo "WARNING: file_counter=${counter} >= number_of_files=${n}"
+assertEquals() {
+    if [[ "${2}" != "${3}" ]]; then
+        echo "${Red}${1}${Color_Off}"
+        failure=1
     fi
-    return 0
 }
+
+assertNotEquals() {
+    if [[ "${2}" == "${3}" ]]; then
+        echo "${Red}${1}${Color_Off}"
+        failure=1
+    fi
+}
+
+assertTrue() {
+    if ! eval "[[ ${2} ]]"; then
+        echo "${Red}${1}${Color_Off}"
+        failure=1
+    fi
+}
+
+assertFalse() {
+    if eval "[[ ${2} ]]"; then
+        echo "${Red}${1}${Color_Off}"
+        failure=1
+    fi
+}
+
+
+# HERE BEGIN THE TEST FUNCTIONS
 
 ####
 ########
 ####
 # The basic_ test set is about the behaviour of all iRODS functions of
 # the script in optimal conditions, i.e. the environment of these\
-# executions is free of traps, all files exist and no failure should occur.
+# executions is free of traps, all files exist and no fail should occur.
 ####
 
 test_basic_syncToArch() {
@@ -196,7 +251,7 @@ test_basic_stageToCache() {
 
 
 test_basic_mkdir() {
-    # iRODS-Phobos mkdir performs nothing. We only need it to return "success"
+    # iRODS-Phobos mkdir performs nothing. We only need it to return 0
     local rc
 
     ####
@@ -209,7 +264,7 @@ test_basic_mkdir() {
 
 
 test_basic_chmod() {
-    # iRODS-Phobos chmod performs nothing. We only need it to return "success"
+    # iRODS-Phobos chmod performs nothing. We only need it to return 0
     local rc
 
     ####
@@ -313,7 +368,7 @@ test_basic_stat() {
     ####
 
     assertEquals "Function ${FUNCNAME[0]} ends with code ${rc} != 0" ${rc} 0
-    assertFalse "No metadata returned" "[ -z ${metadata} ]"
+    assertFalse "No metadata returned" "-z '${metadata}'"
 
     # Ending the test.
     phobos delete "${objectName}"
@@ -383,7 +438,7 @@ test_STA_update_existing_object() {
     assertEquals "Function ${FUNCNAME[0]}_2 ends with code ${rc} != 0" ${rc} 0
     v2=$(phobos object list ${objectName} -o version)
     md2=$(sh ${umss} stat "${objectName}")
-    assertTrue "Version changed from ${v1} to ${v2}" "[ $v2 -eq $((v1 + 1)) ]"
+    assertTrue "Version changed from ${v1} to ${v2}" "$v2 -eq $((v1 + 1))"
     # We know that, field "inode" is unique among files of the local
     # filesystem. So metadata must be changed from one version to the other.
     assertNotEquals "Metadata not updated" "${md1}" "${md2}"
@@ -414,7 +469,7 @@ test_STC_nonexistant_object() {
     ####
 
     assertNotEquals "Function ${FUNCNAME[0]} ends with code ${rc} = 0" ${rc} 0
-    assertFalse "File ${copyName} exists" "[ -f ${copyName} ]"
+    assertFalse "File ${copyName} exists" "-f ${copyName}"
 }
 
 
@@ -545,7 +600,7 @@ test_mv_to_already_taken_oid() {
     "$(cat ${copyName_1})"
     assertEquals "${objectName_2} has been modified" "$(cat ${fileName_2})"\
     "$(cat ${copyName_2})"
-    assertNotEquals "Objects are eventually bot: \n$(cat ${copyName_1})"\
+    assertNotEquals "Objects are eventually bot: $(cat ${copyName_1})"\
     "$(cat ${copyName_1})" "$(cat ${copyName_2})"
 
     # Assert that metadata of objects have not been modified.
@@ -563,6 +618,7 @@ test_mv_to_already_taken_oid() {
     rm -f "${copyName_1}" "${copyName_2}"
 }
 
+
 test_stat_nonexistant_file() {
     local rc
     local objectName
@@ -576,7 +632,7 @@ test_stat_nonexistant_file() {
     ####
 
     assertNotEquals "Function ${FUNCNAME[0]} ends with code ${rc} = 0" ${rc} 0
-    assertTrue "Some metadata returned: \n${metadata}" "[ -z ${metadata} ]"
+    assertTrue "Some metadata returned: ${metadata}" "-z '${metadata}'"
     assertNotEquals "Object ${objectName} found in Phobos"\
     "$(phobos object list ${objectName})" "${objectName}"
 }
@@ -634,7 +690,7 @@ test_iput_and_irm() {
     "  /${zoneName}/home/${userName}/${objPath_iRODS}"
 
     metadata=$(sh ${umss} stat "${objPath_Phobos}")
-    assertFalse "No metadata stored for ${fileName}" "[ -z ${metadata} ]"
+    assertFalse "No metadata stored for ${fileName}" "-z '${metadata}'"
 
     phobos get "${objPath_Phobos}" "${copyName}"
     assertEquals "${fileName} data has been corrupted"\
@@ -650,8 +706,7 @@ test_iput_and_irm() {
     assertEquals "Function ${FUNCNAME[0]} ends with code ${rc} != 0" ${rc} 0
     ils "${objPath_iRODS}"
     rc=$?
-    assertEquals "Data object ${objPath_iRODS} not deleted"\
-    "$rc" "4"
+    assertEquals "Data object ${objPath_iRODS} not deleted" "$rc" "4"
     assertEquals "Object ${objPath_Phobos} found in Phobos."\
     "$(phobos object list ${objPath_Phobos})" ""
 
@@ -668,6 +723,7 @@ test_iput_and_irm() {
     rc=$?
     assertEquals "Parent collection ${parentCollec} not deleted" "$rc" "4"
 }
+
 
 test_iget() {
     local rc
@@ -704,6 +760,7 @@ test_iget() {
     irm -fr "${parentCollec}"
     rm ${copyName}
 }
+
 
 test_imv() {
     local rc
@@ -756,10 +813,12 @@ test_imv() {
     assertEquals "Data object ${new_objPath_iRODS} not found in iRODS"\
     "$(ils ${new_objPath_iRODS})"\
     "  /${zoneName}/home/${userName}/${new_objPath_iRODS}"
+
     assertEquals "Object ${objPath_Phobos} found in Phobos."\
     "$(phobos object list ${objPath_Phobos})" ""
     assertEquals "Object ${new_objPath_Phobos} not found in Phobos"\
     "$(phobos object list ${new_objPath_Phobos})" "${new_objPath_Phobos}"
+
     assertEquals "Metadata have been modified."\
     "${metadata}" "${new_metadata}"
 
@@ -772,6 +831,6 @@ test_imv() {
     rm -f "${copyName}"
 }
 
-# Load and run shunit2. Shellcheck does not support the "expect" language.
-# shellcheck disable=SC1090
-. "${shunit2}"
+
+
+main
