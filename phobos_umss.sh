@@ -212,19 +212,8 @@ _rm () {
 _mv () {
     local rc
     local phobos
-    #local ph_rename_script
-    #local ph_rename
-    local temp
-    local ph_get_script
-    local ph_get
-    local get_md_script
-    local metadata
-    local rm_temp_script
-    local rm_temp
-    local ph_put_script
-    local ph_put
-    local ph_del_script
-    local ph_del
+    local ph_rename_script
+    local ph_rename
     save_log mv "BEGIN mv($*)"
     rc=0
     if [ -z "$1" ]; then
@@ -240,92 +229,17 @@ _mv () {
         save_log mv "END mv($*)"
         return $rc
     fi
-    ##########################################################################
-    # TO BE ARRIVING SOON
-    #if [ $rc == 0 ]; then
-    #    phobos=$(type -P phobos)
-    #    ph_rename_script="sudo $phobos rename ${1} ${2}"
-    #    ph_rename=$($ph_rename_script >> $LOGFILE 2>&1)
-    #    rc=0
-    #    save_log mv "$ph_rename_script return with status=$ph_rename($rc)"
-    #fi
-    #
-    #if [ $rc != 0 ]; then
-    #    record_failure mv"$rc"
-    #fi
-    #save_log mv "END mv($*)"
-    #return $rc
-    #}
-    ##########################################################################
 
-    # FOR NOW, PERFORMS A GET, PUT, DELETE
     phobos=$(type -P phobos)
-    temp=$(mktemp -u /tmp/phobos_mv_XXXXXXXXXX)
-
-    # GET the object $1 into a temporary file, and its metadata into a variable
-    ph_get_script="sudo $phobos get ${1} ${temp}"
-    ph_get=$($ph_get_script >> $LOGFILE 2>&1)
-    get_md_script="sudo $phobos object list $1 -t -o user_md -f human"
-    # shellcheck disable=SC2005
-    metadata=$(echo "$($get_md_script)" | jq -r\
-        'to_entries | map("\(.key)=\(.value)") | join(",")')
+    ph_rename_script="sudo $phobos rename ${1} ${2}"
+    ph_rename=$($ph_rename_script >> $LOGFILE 2>&1)
     rc=$?
-    save_log mv "$ph_get_script return with status=$ph_get($rc)"
+    save_log mv "$ph_rename_script return with status=$ph_rename($rc)"
 
     if [ $rc != 0 ]; then
-        if [ -f "$2" ]; then
-            rm_temp_script="sudo rm -f ${temp}"
-            rm_temp=$($rm_temp_script)
-            rc2=$?
-            save_log mv "$rm_temp return with status=$rm_temp($rc2)"
-        fi
-        record_failure mv "$rc"
-        save_log mv "END mv($*)"
-        return $rc
+        record_failure mv"$rc"
     fi
 
-    # PUT the file /tmp/phobos_mv into an object $2.
-    ph_put_script="sudo $phobos put --metadata ${metadata} ${temp} ${2}"
-    ph_put=$($ph_put_script >> $LOGFILE 2>&1)
-    rc=$?
-    save_log mv "$ph_put_script return with status=$ph_put($rc)"
-    if [ $rc != 0 ]; then
-        if [ -f "$2" ]; then
-            rm_temp_script="sudo rm -f ${temp}"
-            rm_temp=$($rm_temp_script)
-            rc2=$?
-            save_log mv "$rm_temp return with status=$rm_temp($rc2)"
-        fi
-        record_failure mv "$rc"
-        save_log mv "END mv($*)"
-        return $rc
-    fi
-
-    # DEL the object $1 from Phobos.
-    ph_del_script="sudo $phobos del ${1}"
-    ph_del=$($ph_del_script >> $LOGFILE 2>&1)
-    rc=$?
-    save_log mv "$ph_del_script return with status=$ph_del($rc)"
-    if [ $rc != 0 ]; then
-        if [ -f "$2" ]; then
-            rm_temp_script="sudo rm -f ${temp}"
-            rm_temp=$($rm_temp_script)
-            rc2=$?
-            save_log mv "$rm_temp return with status=$rm_temp($rc2)"
-        fi
-        record_failure mv "$rc"
-        save_log mv "END mv($*)"
-        return $rc
-    fi
-
-    rm_temp_script="sudo rm -f ${temp}"
-    rm_temp=$($rm_temp_script)
-    rc=$?
-    save_log mv "$rm_temp return with status=$rm_temp($rc)"
-
-    if [ $rc != 0 ]; then
-        record_failure mv "$rc"
-    fi
     save_log mv "END mv($*)"
     return $rc
 }
